@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -15,6 +16,7 @@ import android.location.Location
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
+import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import com.example.pointoassignment.utils.Utils
@@ -31,9 +33,9 @@ class LocationService : Service() {
     private val fusedLocationClient by lazy { LocationServices.getFusedLocationProviderClient(this) }
     private var mLocationCallback: LocationCallback? = null
     private var mLocationRequest: LocationRequest? = null
-    private val UPDATE_INTERVAL = (360 * 1000 /* 6 minute */).toLong()
-    private val FASTEST_INTERVAL = (180 * 1000 /* 3 minute */).toLong()
-    private val MIN_DISPLACEMENT = 10.0f /* 10 meters */
+    private val UPDATE_INTERVAL = (5000 /* 5 second */).toLong()
+    private val FASTEST_INTERVAL = (1000 /* 1 second */).toLong()
+    private val MIN_DISPLACEMENT = 1.0f /* 1 meters */
     private var addressLocality: String = ""
 
     override fun onBind(intent: Intent?): IBinder? {
@@ -44,22 +46,52 @@ class LocationService : Service() {
         super.onCreate()
         startForeground(
             NOTIFICATION_ID,
-            createNotification(0.0, 0.0, currentLocation = "Fetching Location....")
+            createNotification(0.0, 0.0, currentLocation = "Fetching Coordinates....")
         )
         mLocationRequest =
-            LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, UPDATE_INTERVAL)
-                .setWaitForAccurateLocation(false)
+            LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, UPDATE_INTERVAL)
+                .setWaitForAccurateLocation(true)
                 .setMaxUpdateDelayMillis(FASTEST_INTERVAL)
                 .setMinUpdateDistanceMeters(MIN_DISPLACEMENT)
                 .build()
         mLocationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
+                if (locationResult == null) {
+                    getLastLocation()
+                    return
+                }
+
                 for (location in locationResult.locations) {
                     location?.let { setLocation(it) }
+                    Timber.e("Location >>>>> Lat: ${location.latitude}, Long: ${location.longitude}")
                 }
             }
         }
         startLocationUpdates()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        return START_STICKY
+    }
+
+    private fun getLastLocation() {
+        if (ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+
+        fusedLocationClient.lastLocation
+            .addOnSuccessListener { location: Location? ->
+                if (location != null) {
+                    setLocation(location)
+                }
+            }
     }
 
     private fun setLocation(location: Location) {
@@ -93,7 +125,7 @@ class LocationService : Service() {
             updateNotification(
                 latitude = latitude,
                 longitude = longitude,
-                currentLocation = addressLocality
+                currentLocation = "Current Coordinates"
             )
         }
     }
@@ -125,6 +157,14 @@ class LocationService : Service() {
         longitude: Double,
         currentLocation: String
     ): Notification {
+        val notificationIntent = Intent(this, MainActivity::class.java)
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            notificationIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val notificationChannelId = "LOCATION_CHANNEL"
         val channelName = "Location Service"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -144,6 +184,8 @@ class LocationService : Service() {
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .setContentIntent(pendingIntent)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
     }
 
