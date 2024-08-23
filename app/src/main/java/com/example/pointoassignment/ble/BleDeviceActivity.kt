@@ -13,16 +13,19 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.view.View
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.fragment.app.DialogFragment
+import androidx.lifecycle.ViewModelProvider
 import com.example.pointoassignment.R
 import com.example.pointoassignment.ble.adpter.BleDeviceAdapter
 import com.example.pointoassignment.ble.data.BleDeviceModel
 import com.example.pointoassignment.databinding.ActivityBleDeviceInfoBinding
 import com.example.pointoassignment.utils.Utils
 import timber.log.Timber
+import java.util.UUID
 
 class BleDeviceActivity : AppCompatActivity(), ScanResultConsumer,
     BleDeviceAdapter.BleDeviceAdapterListener {
@@ -36,6 +39,8 @@ class BleDeviceActivity : AppCompatActivity(), ScanResultConsumer,
         )
     }
     private lateinit var clientInfoSheetFragment: ClientInfoSheetFragment
+    private val viewModel by lazy { ViewModelProvider(this)[BleViewModel::class.java] }
+    private var gatt: BluetoothGatt? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,11 +67,13 @@ class BleDeviceActivity : AppCompatActivity(), ScanResultConsumer,
     }
 
     override fun onScanningStarted() {
+        binding.progressCircular.visibility = View.VISIBLE
         Utils.showToast("Scanning Start")
     }
 
     override fun onScanningStopped() {
         Utils.showToast("Scanning Stop")
+        binding.progressCircular.visibility = View.GONE
     }
 
     @SuppressLint("NotifyDataSetChanged")
@@ -80,7 +87,7 @@ class BleDeviceActivity : AppCompatActivity(), ScanResultConsumer,
         }
 
         val name = if (device.name == null) {
-            "N/A"
+            ""
         } else {
             device.name
         }
@@ -105,7 +112,9 @@ class BleDeviceActivity : AppCompatActivity(), ScanResultConsumer,
         ) {
             return
         }
-        device.connectGatt(this, false, gattCallback)
+        gatt?.close()
+        gatt = device.connectGatt(this, false, gattCallback)
+        showClientInfo(device.name, device.address)
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
@@ -118,21 +127,21 @@ class BleDeviceActivity : AppCompatActivity(), ScanResultConsumer,
             ) {
                 return
             }
-            if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                gatt?.close()
-            }
 
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 gatt?.discoverServices()
             }
 
             Timber.e("Connection State: $newState")
+            Utils.showToast("State: $newState")
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
             super.onServicesDiscovered(gatt, status)
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 displayAvailableServicesAndCharacteristics(gatt!!)
+            } else if (status == BluetoothGatt.GATT_FAILURE) {
+                viewModel.clintInfo.value = Pair("GATT_FAILURE", "")
             }
         }
     }
@@ -149,38 +158,41 @@ class BleDeviceActivity : AppCompatActivity(), ScanResultConsumer,
         val clientInfoSb = StringBuilder()
         val services = gatt.services
         for (service in services) {
-            clientInfoSb.append("Service UUID: ${service.uuid}\n")
+            clientInfoSb.append("Service UUID: ${UUID.fromString(service.uuid.toString())}\n\t\t\t")
+
 
             val characteristics = service.characteristics
             for (characteristic in characteristics) {
                 clientInfoSb.append("${displayCharacteristicProperties(characteristic)}\n")
-                Timber.e("Client info >>>>>>>>>> $clientInfoSb")
-                showClientInfo(height = binding.parent.height, infoStr = clientInfoSb.toString())
             }
+
+            clientInfoSb.append("\n\n")
         }
+        Timber.e("Client info >>>>>>>>>> $clientInfoSb")
+        viewModel.clintInfo.value = Pair("GATT_SUCCESS", clientInfoSb.toString())
     }
 
     private fun displayCharacteristicProperties(characteristic: BluetoothGattCharacteristic): String {
         val properties = characteristic.properties
 
         if (properties and BluetoothGattCharacteristic.PROPERTY_READ != 0) {
-            return "Characteristic ${characteristic.uuid} supports READ"
+            return "Characteristic ${characteristic.uuid}\n\t\t\t Properties: READ"
         }
 
         if (properties and BluetoothGattCharacteristic.PROPERTY_WRITE != 0) {
-            return "Characteristic ${characteristic.uuid} supports WRITE"
+            return "Characteristic ${characteristic.uuid}\n\t\t\t Properties: WRITE"
         }
 
         if (properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0) {
-            return "Characteristic ${characteristic.uuid} supports NOTIFY"
+            return "Characteristic ${characteristic.uuid}\n\t\t\t Properties: NOTIFY"
         }
 
         if (properties and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0) {
-            return "Characteristic ${characteristic.uuid} supports INDICATE"
+            return "Characteristic ${characteristic.uuid}\n\t\t\t  Properties: INDICATE"
         }
 
         if (properties and BluetoothGattCharacteristic.PROPERTY_SIGNED_WRITE != 0) {
-            return "Characteristic ${characteristic.uuid} supports SIGNED WRITE"
+            return "Characteristic ${characteristic.uuid}\n\t\t\t Properties: SIGNED WRITE"
         }
 
         return ""
@@ -253,8 +265,9 @@ class BleDeviceActivity : AppCompatActivity(), ScanResultConsumer,
         }
     }
 
-    private fun showClientInfo(height: Int, infoStr: String) {
-        clientInfoSheetFragment = ClientInfoSheetFragment(height = height, clientInfoSb = infoStr)
+    private fun showClientInfo(deviceName: String, address: String) {
+        clientInfoSheetFragment =
+            ClientInfoSheetFragment(binding.parent.height, deviceName, address)
         clientInfoSheetFragment.setStyle(
             DialogFragment.STYLE_NO_TITLE, R.style.QuizAppBottomSheetDialogTheme
         )
@@ -266,4 +279,17 @@ class BleDeviceActivity : AppCompatActivity(), ScanResultConsumer,
             }
         }
     }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        gatt?.close()
+    }
+
 }

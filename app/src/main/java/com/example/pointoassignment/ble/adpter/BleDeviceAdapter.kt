@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothDevice.BOND_BONDED
 import android.bluetooth.BluetoothDevice.BOND_BONDING
 import android.bluetooth.BluetoothDevice.BOND_NONE
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.example.pointoassignment.ble.data.BleDeviceModel
@@ -40,7 +41,13 @@ class BleDeviceAdapter(
         RecyclerView.ViewHolder(binding.root) {
 
         fun bindData(data: BleDeviceModel) {
-            binding.tvDeviceName.text = data.name
+            if (data.name.isNullOrEmpty()){
+                binding.tvDeviceName.text = "N/A"
+                binding.btnConnect.visibility = View.GONE
+            } else{
+                binding.tvDeviceName.text = data.name
+                binding.btnConnect.visibility = View.VISIBLE
+            }
 
             binding.tvDeviceAddress.text = data.address
 
