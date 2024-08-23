@@ -49,6 +49,10 @@ class BleDeviceActivity : AppCompatActivity(), ScanResultConsumer,
 
         binding.btnScan.setOnClickListener {
             bleDeviceAdapter.deviceList.clear()
+            if (!bleScanner.isDeviceSupportBluetooth()){
+                Utils.showToast("No bluetooth hardware.")
+                return@setOnClickListener
+            }
             if (!bleScanner.isBluetoothEnable()) {
                 showEnableBluetoothDialog(this)
                 return@setOnClickListener
@@ -290,6 +294,7 @@ class BleDeviceActivity : AppCompatActivity(), ScanResultConsumer,
             return
         }
         gatt?.close()
+        bleScanner.stopScan()
     }
 
 }

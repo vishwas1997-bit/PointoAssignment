@@ -15,6 +15,7 @@
         android:layout_marginTop="16dp"
         android:layout_marginBottom="16dp"
         android:text="Scan Devices"
+        android:textColor="@color/white"
         app:layout_constraintEnd_toStartOf="@id/progress_circular"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />

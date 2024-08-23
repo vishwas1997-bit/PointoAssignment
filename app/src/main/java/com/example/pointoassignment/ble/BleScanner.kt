@@ -8,13 +8,10 @@ import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
-import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
-import androidx.core.app.ActivityCompat.startActivityForResult
 import timber.log.Timber
 
 
@@ -39,6 +36,10 @@ class BleScanner(private val context: Context) {
 
     fun isBluetoothEnable(): Boolean{
        return bleAdapter?.isEnabled!!
+    }
+
+    fun isDeviceSupportBluetooth(): Boolean{
+        return bleAdapter != null
     }
 
     fun scan(scanResultConsumer: ScanResultConsumer?, scanTime: Long = 30000) {
@@ -72,6 +73,18 @@ class BleScanner(private val context: Context) {
         this.scanResultConsumer = scanResultConsumer
         leScanner!!.startScan(scanCallBack)
         setScanning(true)
+    }
+
+    fun stopScan(){
+        if (ActivityCompat.checkSelfPermission(
+                context,
+                Manifest.permission.BLUETOOTH_SCAN
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        leScanner!!.stopScan(scanCallBack)
+        Timber.e("Stop Scan")
     }
 
     private val scanCallBack: ScanCallback = object : ScanCallback() {
