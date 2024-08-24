@@ -49,6 +49,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnStopLocationUpdates.setOnClickListener {
+            Utils.showToast("Location Update Stop")
             stopService(Intent(this, LocationService::class.java))
         }
 
@@ -64,6 +65,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             startService(Intent(this, LocationService::class.java))
         }
+        Utils.showToast("Location updates, started, Please check Notification on StatusBar")
     }
 
     private fun isPermissionGranted() = permission.all {
@@ -140,8 +142,16 @@ class MainActivity : AppCompatActivity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_CHECK_SETTINGS) {
             when (resultCode) {
-                RESULT_OK -> {}
-                RESULT_CANCELED -> {}
+                RESULT_OK -> {
+                    if (isPermissionGranted()) {
+                        if (Utils.isGPSEnabled()) {
+                            startLocationService()
+                        }
+                    }
+                }
+                RESULT_CANCELED -> {
+                    Utils.showToast("Gps not enable")
+                }
                 else -> {}
             }
         }

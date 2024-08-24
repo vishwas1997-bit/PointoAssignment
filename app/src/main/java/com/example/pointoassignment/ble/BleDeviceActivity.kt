@@ -12,8 +12,10 @@ import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.view.View
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -24,6 +26,7 @@ import com.example.pointoassignment.ble.adpter.BleDeviceAdapter
 import com.example.pointoassignment.ble.data.BleDeviceModel
 import com.example.pointoassignment.databinding.ActivityBleDeviceInfoBinding
 import com.example.pointoassignment.utils.Utils
+import com.google.android.material.snackbar.Snackbar
 import timber.log.Timber
 import java.util.UUID
 
@@ -49,10 +52,6 @@ class BleDeviceActivity : AppCompatActivity(), ScanResultConsumer,
 
         binding.btnScan.setOnClickListener {
             bleDeviceAdapter.deviceList.clear()
-            if (!bleScanner.isDeviceSupportBluetooth()){
-                Utils.showToast("No bluetooth hardware.")
-                return@setOnClickListener
-            }
             if (!bleScanner.isBluetoothEnable()) {
                 showEnableBluetoothDialog(this)
                 return@setOnClickListener
@@ -82,12 +81,14 @@ class BleDeviceActivity : AppCompatActivity(), ScanResultConsumer,
 
     @SuppressLint("NotifyDataSetChanged")
     private fun prepareData(device: BluetoothDevice, rssi: Int) {
-        if (ActivityCompat.checkSelfPermission(
-                this@BleDeviceActivity,
-                Manifest.permission.BLUETOOTH_CONNECT
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            return
+        if ((Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)){
+            if (ActivityCompat.checkSelfPermission(
+                    this@BleDeviceActivity,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                return
+            }
         }
 
         val name = if (device.name == null) {
@@ -109,12 +110,14 @@ class BleDeviceActivity : AppCompatActivity(), ScanResultConsumer,
     }
 
     private fun connect(device: BluetoothDevice) {
-        if (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_CONNECT
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            return
+        if ((Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)){
+            if (ActivityCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                return
+            }
         }
         gatt?.close()
         gatt = device.connectGatt(this, false, gattCallback)
@@ -124,16 +127,22 @@ class BleDeviceActivity : AppCompatActivity(), ScanResultConsumer,
     private val gattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
             super.onConnectionStateChange(gatt, status, newState)
-            if (ActivityCompat.checkSelfPermission(
-                    this@BleDeviceActivity,
-                    Manifest.permission.BLUETOOTH_CONNECT
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                return
+            if ((Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)){
+                if (ActivityCompat.checkSelfPermission(
+                        this@BleDeviceActivity,
+                        Manifest.permission.BLUETOOTH_CONNECT
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    return
+                }
             }
 
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 gatt?.discoverServices()
+            }
+
+            if (newState == BluetoothProfile.STATE_DISCONNECTED){
+                Utils.showToast("Disconnected, Please try later")
             }
 
             Timber.e("Connection State: $newState")
@@ -151,12 +160,14 @@ class BleDeviceActivity : AppCompatActivity(), ScanResultConsumer,
     }
 
     private fun displayAvailableServicesAndCharacteristics(gatt: BluetoothGatt) {
-        if (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_CONNECT
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            return
+        if ((Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)){
+            if (ActivityCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                return
+            }
         }
 
         val clientInfoSb = StringBuilder()
@@ -213,14 +224,20 @@ class BleDeviceActivity : AppCompatActivity(), ScanResultConsumer,
             .setPositiveButton("Enable") { dialog, _ ->
                 // Start an intent to enable Bluetooth
                 val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-                if (ActivityCompat.checkSelfPermission(
-                        this,
-                        Manifest.permission.BLUETOOTH_CONNECT
-                    ) != PackageManager.PERMISSION_GRANTED
-                ) {
-                    return@setPositiveButton
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    if (ActivityCompat.checkSelfPermission(
+                            this,
+                            Manifest.permission.BLUETOOTH_CONNECT
+                        )
+                        == PackageManager.PERMISSION_GRANTED
+                    ) {
+                        startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT)
+                    } else {
+                        permissionRequest.launch(permission.toTypedArray())
+                    }
+                } else {
+                    startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT)
                 }
-                startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT)
                 dialog.dismiss()
             }
             .setNegativeButton("Cancel") { dialog, _ ->
@@ -286,15 +303,48 @@ class BleDeviceActivity : AppCompatActivity(), ScanResultConsumer,
 
     override fun onDestroy() {
         super.onDestroy()
-        if (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_CONNECT
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            return
+        if ((Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)){
+            if (ActivityCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                return
+            }
         }
         gatt?.close()
         bleScanner.stopScan()
     }
+
+    private val permission = mutableListOf<String>().apply {
+        add(Manifest.permission.ACCESS_FINE_LOCATION)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            add(Manifest.permission.BLUETOOTH_SCAN)
+            add(Manifest.permission.BLUETOOTH_CONNECT)
+        }
+    }
+
+    private val permissionRequest =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+            for (item in permissions) {
+                if (item.key == Manifest.permission.POST_NOTIFICATIONS && !item.value) {
+                    Snackbar.make(
+                        findViewById(android.R.id.content),
+                        "Notification permission is required to show the persistent notification.",
+                        Snackbar.LENGTH_INDEFINITE
+                    ).setAction("Grant") {
+
+                    }.show()
+                } else if (item.key == Manifest.permission.ACCESS_FINE_LOCATION && !item.value) {
+                    Snackbar.make(
+                        findViewById(android.R.id.content),
+                        "Location permission is required to use this app.",
+                        Snackbar.LENGTH_INDEFINITE
+                    ).setAction("Grant") {
+
+                    }.show()
+                }
+            }
+        }
 
 }
